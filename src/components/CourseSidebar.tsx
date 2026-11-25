@@ -68,6 +68,7 @@ interface CourseSidebarProps {
 }
 
 const FILTER_DAYS: DayCode[] = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];
+const FILTER_CREDITS = [1, 2, 3, 4] as const;
 
 function normalizeQuery(str: string): string {
   return str.toLowerCase().replace(/\s+/g, '');
@@ -246,13 +247,15 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(() => entries.length === 0);
 
-  // Committed course level filter
+  // Committed course level & credit hours filters
   const [minLevel, setMinLevel] = useState<number | null>(null);
   const [maxLevel, setMaxLevel] = useState<number | null>(null);
+  const [selectedCredits, setSelectedCredits] = useState<number[]>([]);
 
   // Draft state inside the Filter panel (applied on Save, discarded on Cancel)
   const [draftMinLevel, setDraftMinLevel] = useState('');
   const [draftMaxLevel, setDraftMaxLevel] = useState('');
+  const [draftCredits, setDraftCredits] = useState<number[]>([]);
   const [draftDays, setDraftDays] = useState<DayCode[]>([]);
   const [draftStartMin, setDraftStartMin] = useState(12 * 60);
   const [draftEndMin, setDraftEndMin] = useState(15 * 60);
@@ -281,6 +284,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   const openFilters = () => {
     setDraftMinLevel(minLevel !== null ? String(minLevel) : '');
     setDraftMaxLevel(maxLevel !== null ? String(maxLevel) : '');
+    setDraftCredits(selectedCredits);
     setDraftDays(timeSlotFilter?.days ?? []);
     setDraftStartMin(timeSlotFilter?.startMin ?? 12 * 60);
     setDraftEndMin(timeSlotFilter?.endMin ?? 15 * 60);
@@ -301,6 +305,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
     const parsedMax = parseInt(draftMaxLevel.trim(), 10);
     setMinLevel(Number.isNaN(parsedMin) ? null : parsedMin);
     setMaxLevel(Number.isNaN(parsedMax) ? null : parsedMax);
+    setSelectedCredits([...draftCredits].sort((a, b) => a - b));
 
     if (draftDays.length > 0 || draftTimeTouched) {
       const startMin = draftStartMin;
@@ -329,12 +334,14 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   const handleRemoveAllFilters = () => {
     setDraftMinLevel('');
     setDraftMaxLevel('');
+    setDraftCredits([]);
     setDraftDays([]);
     setDraftStartMin(12 * 60);
     setDraftEndMin(15 * 60);
     setDraftTimeTouched(false);
     setMinLevel(null);
     setMaxLevel(null);
+    setSelectedCredits([]);
     onTimeSlotFilterChange(null);
     setExpandedCode(null);
     setShowFilters(false);
@@ -358,10 +365,17 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   }, [entries]);
 
   const hasLevelFilter = minLevel !== null || maxLevel !== null;
+  const hasCreditsFilter = selectedCredits.length > 0;
   const hasTimeFilter = timeSlotFilter !== null;
-  const activeFilterCount = (hasLevelFilter ? 1 : 0) + (hasTimeFilter ? 1 : 0);
+  const activeFilterCount =
+    (hasLevelFilter ? 1 : 0) +
+    (hasCreditsFilter ? 1 : 0) +
+    (hasTimeFilter ? 1 : 0);
   const isSearchingOrFiltering =
-    query.trim().length > 0 || hasLevelFilter || hasTimeFilter;
+    query.trim().length > 0 ||
+    hasLevelFilter ||
+    hasCreditsFilter ||
+    hasTimeFilter;
 
   const filteredResults = useMemo(() => {
     if (!isSearchingOrFiltering) return [];
@@ -377,6 +391,10 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
 
     for (const course of courses) {
       if (hasLevelFilter && !matchesCourseLevelRange(course.code, minLevel, maxLevel)) {
+        continue;
+      }
+
+      if (hasCreditsFilter && !selectedCredits.includes(course.credits)) {
         continue;
       }
 
@@ -441,6 +459,8 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
     minLevel,
     maxLevel,
     hasLevelFilter,
+    selectedCredits,
+    hasCreditsFilter,
     timeSlotFilter,
     isSearchingOrFiltering,
   ]);
@@ -460,6 +480,12 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
     );
   };
 
+  const toggleDraftCredit = (ch: number) => {
+    setDraftCredits((prev) =>
+      prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
+    );
+  };
+
   const pairSuggestion = timeSlotFilter
     ? getPairDaySuggestion(timeSlotFilter.days)
     : null;
@@ -467,6 +493,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   const hasAnyDraftOrActiveFilter =
     draftMinLevel.trim() !== '' ||
     draftMaxLevel.trim() !== '' ||
+    draftCredits.length > 0 ||
     draftDays.length > 0 ||
     draftTimeTouched ||
     activeFilterCount > 0;
@@ -591,6 +618,36 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
               </div>
             </div>
 
+            {/* Credit Hours (1 CH – 4 CH) */}
+            <div className="space-y-1.5 pt-2.5 border-t border-[#EFECE5] dark:border-[#2A302D]">
+              <label className="block text-[11.5px] font-semibold text-[#3B443F] dark:text-[#D1DAD5]">
+                Credit Hours{' '}
+                <span className="font-normal text-[#838D87] dark:text-[#7E8A84]">
+                  (Optional)
+                </span>
+              </label>
+
+              <div className="grid grid-cols-4 gap-1">
+                {FILTER_CREDITS.map((ch) => {
+                  const selected = draftCredits.includes(ch);
+                  return (
+                    <button
+                      key={ch}
+                      type="button"
+                      onClick={() => toggleDraftCredit(ch)}
+                      className={`rounded-lg py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                        selected
+                          ? 'bg-[#3D7A6E] dark:bg-[#5B9B8E] text-white'
+                          : 'bg-[#F3F0E9] dark:bg-[#272D2A] text-[#5C6660] dark:text-[#9BA6A0] hover:bg-[#E8E4DB] dark:hover:bg-[#303734]'
+                      }`}
+                    >
+                      {ch} CH
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Days (Clean Buttons Only — No Empty Bar) & Fixed-Format Time */}
             <div className="space-y-2 pt-2.5 border-t border-[#EFECE5] dark:border-[#2A302D]">
               <label className="block text-[11.5px] font-semibold text-[#3B443F] dark:text-[#D1DAD5]">
@@ -672,7 +729,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
         )}
 
         {/* Active Filter / Grid Slot Indicators (Click to edit/remove inside Filter tab) */}
-        {(hasLevelFilter || hasTimeFilter) && (
+        {(hasLevelFilter || hasCreditsFilter || hasTimeFilter) && (
           <div className="flex flex-wrap items-center gap-1">
             {hasLevelFilter && (
               <button
@@ -688,6 +745,17 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
                       ? `≥ ${minLevel}`
                       : `≤ ${maxLevel}`}
                 </span>
+              </button>
+            )}
+
+            {hasCreditsFilter && (
+              <button
+                type="button"
+                onClick={openFilters}
+                title="Open filters to edit or remove"
+                className="inline-flex items-center gap-1 rounded-full bg-[#EDF5F2] dark:bg-[#1E312C] border border-[#CBE0D9] dark:border-[#2E4A43] px-2.5 py-0.5 text-[11px] font-medium text-[#2B5E53] dark:text-[#8CC8BA] hover:bg-[#E0EFEA] dark:hover:bg-[#263E38] transition-colors cursor-pointer"
+              >
+                <span>{selectedCredits.join(', ')} CH</span>
               </button>
             )}
 
