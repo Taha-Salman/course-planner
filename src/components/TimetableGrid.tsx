@@ -451,15 +451,15 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                           }`}
                         >
                           {!isTight && !isMedium && (
-                            <div className="absolute inset-y-2 left-1/2 -translate-x-1/2 border-l border-dashed border-[#3D7A6E]/35 dark:border-[#72B0A2]/35" />
+                            <div className="absolute inset-y-2 left-1/2 -translate-x-1/2 border-l border-dashed border-[#C9C4BA]/45 dark:border-[#363E3A]/55" />
                           )}
                           <span
-                            className={`relative rounded-full font-semibold leading-none whitespace-nowrap shadow-2xs ${
+                            className={`relative rounded-full font-medium leading-none whitespace-nowrap ${
                               isTight
-                                ? 'px-1.5 py-[2px] text-[9.5px] bg-[#F7F0E2] dark:bg-[#31291D] border border-[#E2CFA8] dark:border-[#55462D] text-[#78592B] dark:text-[#DFB977]'
+                                ? 'px-1.5 py-[2px] text-[9.5px] bg-[#F5F2EC]/95 dark:bg-[#1D211F]/95 border border-[#E5DFD3] dark:border-[#2E3431] text-[#8B7B62] dark:text-[#978B75]'
                                 : isMedium
-                                  ? 'px-2 py-[2px] text-[10px] bg-[#FAF9F6] dark:bg-[#1B2320] border border-[#D4E2DD] dark:border-[#2F443E] text-[#35695E] dark:text-[#8BC6B9]'
-                                  : 'px-2 py-0.5 text-[10.5px] bg-[#FAF9F6]/95 dark:bg-[#1B2320]/95 border border-[#D4E2DD] dark:border-[#2F443E] text-[#35695E] dark:text-[#8BC6B9]'
+                                  ? 'px-2 py-[2px] text-[10px] bg-[#F7F5F0]/95 dark:bg-[#191D1B]/95 border border-[#E6E2D9] dark:border-[#2A302D] text-[#848E88] dark:text-[#76827C]'
+                                  : 'px-2 py-0.5 text-[10px] bg-[#F7F5F0]/90 dark:bg-[#191D1B]/90 border border-[#E6E2D9] dark:border-[#2A302D] text-[#848E88] dark:text-[#76827C]'
                             }`}
                           >
                             {isTight ? label : `${label} free`}

@@ -33,7 +33,7 @@ export function App() {
     clearActiveTimetable,
   } = useTimetables();
 
-  const [showGaps, setShowGaps] = useState(false);
+  const [showGaps, setShowGaps] = useState(true);
   const [showWeekends, setShowWeekends] = useState(false);
   const [mobileTab, setMobileTab] = useState<'timetable' | 'courses'>(
     'timetable'
