@@ -43,6 +43,15 @@ export function formatDurationShort(totalMinutes: number): string {
   return `${hours}h ${mins}m`;
 }
 
+export function formatClassDuration(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  const hPart = hours > 0 ? `${hours}${hours === 1 ? 'hr' : 'hrs'}` : '';
+  const mPart = mins > 0 ? `${mins}${mins === 1 ? 'min' : 'mins'}` : '';
+  if (hPart && mPart) return `${hPart} ${mPart}`;
+  return hPart || mPart || '0mins';
+}
+
 /**
  * Computes free-time gaps between consecutive classes on a single day.
  * Overlapping classes are merged into unified busy intervals first.

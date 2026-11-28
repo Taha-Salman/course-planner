@@ -5,6 +5,7 @@ import {
   COURSE_PALETTE,
   DAY_NAMES,
   DAY_ORDER,
+  formatClassDuration,
   formatDurationShort,
   formatMinutesToTime,
   formatTimeDisplay,
@@ -549,7 +550,9 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                   {/* Course Blocks (guaranteed minHeight so all details always fit cleanly) */}
                   {positioned.map(({ block, col, totalCols }) => {
                     const topPct = toPct(block.startMin - startHour * 60);
-                    const durationMin = Math.max(40, block.endMin - block.startMin);
+                    const actualDurationMin = Math.max(0, block.endMin - block.startMin);
+                    const durationMin = Math.max(40, actualDurationMin);
+                    const classDurationLabel = formatClassDuration(actualDurationMin);
                     const heightPct = toPct(durationMin);
                     const widthPct = 100 / totalCols;
                     const leftPct = col * widthPct;
@@ -587,7 +590,8 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                           </div>
                           <p className="text-[10.5px] font-medium text-[#5A6660] dark:text-[#7D8A83] truncate leading-tight">
                             {formatTimeDisplay(block.startTime).replace(':00', '')} –{' '}
-                            {formatTimeDisplay(block.endTime).replace(':00', '')}
+                            {formatTimeDisplay(block.endTime).replace(':00', '')} ·{' '}
+                            {classDurationLabel}
                           </p>
                           <p className="text-[10.5px] text-[#6B7771] dark:text-[#6E7B74] truncate leading-tight">
                             {instructorLabel}
@@ -672,7 +676,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                           </button>
                         </div>
 
-                        {/* Row 2: Time */}
+                        {/* Row 2: Time + Class Duration */}
                         <div
                           className={`text-[10.5px] font-semibold truncate leading-tight ${
                             block.hasConflict
@@ -681,7 +685,10 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                           }`}
                         >
                           {formatTimeDisplay(block.startTime).replace(':00', '')} –{' '}
-                          {formatTimeDisplay(block.endTime).replace(':00', '')}
+                          {formatTimeDisplay(block.endTime).replace(':00', '')}{' '}
+                          <span className="opacity-80 font-medium">
+                            · {classDurationLabel}
+                          </span>
                         </div>
 
                         {/* Row 3: Instructor Name (+ Clash badge if overlapping) */}
