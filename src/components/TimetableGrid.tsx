@@ -436,6 +436,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                       const topPct = toPct(gap.startMin - startHour * 60);
                       const heightPct = toPct(gap.durationMin);
                       const isTight = gap.durationMin < 30;
+                      const isMedium = gap.durationMin >= 30 && gap.durationMin < 60;
                       const label = formatDurationShort(gap.durationMin);
 
                       return (
@@ -445,18 +446,20 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                             top: `${topPct}%`,
                             height: `${heightPct}%`,
                           }}
-                          className={`absolute inset-x-2 pointer-events-none flex items-center justify-center ${
-                            isTight ? 'z-20' : 'z-5'
+                          className={`absolute inset-x-2 z-20 pointer-events-none flex justify-center ${
+                            isMedium ? 'items-end pb-[3px]' : 'items-center'
                           }`}
                         >
-                          {!isTight && (
-                            <div className="absolute inset-y-1.5 left-1/2 -translate-x-1/2 border-l border-dashed border-[#3D7A6E]/35 dark:border-[#72B0A2]/35" />
+                          {!isTight && !isMedium && (
+                            <div className="absolute inset-y-2 left-1/2 -translate-x-1/2 border-l border-dashed border-[#3D7A6E]/35 dark:border-[#72B0A2]/35" />
                           )}
                           <span
-                            className={`relative rounded-full px-2 py-0.5 font-semibold leading-none whitespace-nowrap shadow-2xs ${
+                            className={`relative rounded-full font-semibold leading-none whitespace-nowrap shadow-2xs ${
                               isTight
-                                ? 'text-[9.5px] bg-[#F7F0E2]/95 dark:bg-[#31291D]/95 border border-[#E2CFA8] dark:border-[#55462D] text-[#78592B] dark:text-[#DFB977]'
-                                : 'text-[10.5px] bg-[#FAF9F6]/95 dark:bg-[#1B2320]/95 border border-[#D4E2DD] dark:border-[#2F443E] text-[#35695E] dark:text-[#8BC6B9]'
+                                ? 'px-1.5 py-[2px] text-[9.5px] bg-[#F7F0E2] dark:bg-[#31291D] border border-[#E2CFA8] dark:border-[#55462D] text-[#78592B] dark:text-[#DFB977]'
+                                : isMedium
+                                  ? 'px-2 py-[2px] text-[10px] bg-[#FAF9F6] dark:bg-[#1B2320] border border-[#D4E2DD] dark:border-[#2F443E] text-[#35695E] dark:text-[#8BC6B9]'
+                                  : 'px-2 py-0.5 text-[10.5px] bg-[#FAF9F6]/95 dark:bg-[#1B2320]/95 border border-[#D4E2DD] dark:border-[#2F443E] text-[#35695E] dark:text-[#8BC6B9]'
                             }`}
                           >
                             {isTight ? label : `${label} free`}
