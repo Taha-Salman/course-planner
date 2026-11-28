@@ -1,15 +1,13 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, X } from 'lucide-react';
 import type { DayCode, GridBlock } from '../types/course';
 import {
   COURSE_PALETTE,
   DAY_NAMES,
   DAY_ORDER,
-  computeDayGaps,
   formatDurationShort,
   formatMinutesToTime,
   formatTimeDisplay,
-  type DayGap,
   type TimeSlotFilter,
 } from '../lib/scheduleUtils';
 
@@ -39,6 +37,14 @@ interface DragState {
 const SNAP_MINUTES = 15;
 const GRID_PAD_TOP = 16; // breathing room between header bar and 8 AM line
 const GRID_PAD_BOTTOM = 12;
+const BLOCK_MIN_HEIGHT_PX = 54;
+
+interface VisualGap {
+  key: string;
+  topPx: number;
+  heightPx: number;
+  durationMin: number;
+}
 
 function layoutDayBlocks(dayBlocks: GridBlock[]): PositionedBlock[] {
   if (dayBlocks.length === 0) return [];
@@ -123,6 +129,21 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
 }) => {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const dragColumnRef = useRef<HTMLDivElement | null>(null);
+  const gridBodyRef = useRef<HTMLDivElement | null>(null);
+  const [gridHeightPx, setGridHeightPx] = useState<number>(0);
+
+  useEffect(() => {
+    const el = gridBodyRef.current;
+    if (!el) return;
+    const update = () => {
+      const innerH = el.clientHeight - GRID_PAD_TOP - GRID_PAD_BOTTOM;
+      setGridHeightPx(Math.max(0, innerH));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const allBlocks = useMemo(
     () => [...blocks, ...previewBlocks],
@@ -176,15 +197,77 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     return map;
   }, [allBlocks, visibleDays]);
 
+  // Compute exact pixel-level gaps between rendered course cards so labels sit dead-center
+  // between actual card borders (accounting for BLOCK_MIN_HEIGHT_PX) with zero overlap.
   const gapsByDay = useMemo(() => {
-    const map = new Map<DayCode, DayGap[]>();
-    if (!showGaps) return map;
+    const map = new Map<DayCode, VisualGap[]>();
+    if (!showGaps || gridHeightPx <= 0) return map;
+
+    const startOffsetMin = startHour * 60;
+    const minToPx = (m: number) => ((m - startOffsetMin) / totalMinutes) * gridHeightPx;
+
     for (const day of visibleDays) {
-      const dayRealBlocks = blocks.filter((b) => b.day === day);
-      map.set(day, computeDayGaps(day, dayRealBlocks));
+      const dayRealBlocks = blocks
+        .filter((b) => b.day === day && !b.isPreview)
+        .sort((a, b) => a.startMin - b.startMin);
+
+      if (dayRealBlocks.length < 2) {
+        map.set(day, []);
+        continue;
+      }
+
+      // Merge overlapping time spans while tracking actual visual top & bottom pixels
+      const spans: Array<{
+        startMin: number;
+        endMin: number;
+        visualTop: number;
+        visualBottom: number;
+      }> = [];
+
+      for (const b of dayRealBlocks) {
+        const durMin = Math.max(40, b.endMin - b.startMin);
+        const topPx = minToPx(b.startMin) + 1;
+        const rawHeightPx = (durMin / totalMinutes) * gridHeightPx - 2;
+        const heightPx = Math.max(BLOCK_MIN_HEIGHT_PX, rawHeightPx);
+        const bottomPx = topPx + heightPx;
+
+        const last = spans[spans.length - 1];
+        if (!last || b.startMin > last.endMin) {
+          spans.push({
+            startMin: b.startMin,
+            endMin: b.endMin,
+            visualTop: topPx,
+            visualBottom: bottomPx,
+          });
+        } else {
+          last.endMin = Math.max(last.endMin, b.endMin);
+          last.visualTop = Math.min(last.visualTop, topPx);
+          last.visualBottom = Math.max(last.visualBottom, bottomPx);
+        }
+      }
+
+      const visualGaps: VisualGap[] = [];
+      for (let i = 0; i < spans.length - 1; i++) {
+        const durationMin = spans[i + 1].startMin - spans[i].endMin;
+        const gapTop = spans[i].visualBottom;
+        const gapBottom = spans[i + 1].visualTop;
+        const gapHeight = gapBottom - gapTop;
+
+        if (durationMin > 0 && gapHeight >= 12) {
+          visualGaps.push({
+            key: `gap-${day}-${spans[i].endMin}`,
+            topPx: gapTop,
+            heightPx: gapHeight,
+            durationMin,
+          });
+        }
+      }
+
+      map.set(day, visualGaps);
     }
+
     return map;
-  }, [showGaps, blocks, visibleDays]);
+  }, [showGaps, blocks, visibleDays, gridHeightPx, startHour, totalMinutes]);
 
   const toPct = useCallback(
     (minutesFromStart: number) => (minutesFromStart / totalMinutes) * 100,
@@ -305,6 +388,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
 
         {/* Full-Height 2-Hour Interval Grid with Top Breathing Room */}
         <div
+          ref={gridBodyRef}
           className="grid flex-1 min-h-0 relative select-none"
           style={{
             gridTemplateColumns: `50px repeat(${visibleDays.length}, minmax(0, 1fr))`,
@@ -430,40 +514,34 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                     </div>
                   )}
 
-                  {/* Free-Time Gaps Between Consecutive Classes (Non-intrusive, drag-through enabled) */}
+                  {/* Free-Time Gaps Dead-Centered Between Actual Card Borders (Zero Overlap) */}
                   {showGaps &&
                     dayGaps.map((gap) => {
-                      const topPct = toPct(gap.startMin - startHour * 60);
-                      const heightPct = toPct(gap.durationMin);
-                      const isTight = gap.durationMin < 30;
-                      const isMedium = gap.durationMin >= 30 && gap.durationMin < 60;
                       const label = formatDurationShort(gap.durationMin);
+                      const hasRoomForPill = gap.heightPx >= 28;
+                      const hasRoomForLine = gap.heightPx >= 46;
 
                       return (
                         <div
-                          key={`gap-${gap.day}-${gap.startMin}`}
+                          key={gap.key}
                           style={{
-                            top: `${topPct}%`,
-                            height: `${heightPct}%`,
+                            top: `${gap.topPx}px`,
+                            height: `${gap.heightPx}px`,
                           }}
-                          className={`absolute inset-x-2 z-20 pointer-events-none flex justify-center ${
-                            isMedium ? 'items-end pb-[3px]' : 'items-center'
-                          }`}
+                          className="absolute inset-x-2 z-5 pointer-events-none flex items-center justify-center overflow-hidden"
                         >
-                          {!isTight && !isMedium && (
-                            <div className="absolute inset-y-2 left-1/2 -translate-x-1/2 border-l border-dashed border-[#C9C4BA]/45 dark:border-[#363E3A]/55" />
+                          {hasRoomForLine && (
+                            <div className="absolute inset-y-2.5 left-1/2 -translate-x-1/2 border-l border-dashed border-[#C9C4BA]/45 dark:border-[#363E3A]/55" />
                           )}
-                          <span
-                            className={`relative rounded-full font-medium leading-none whitespace-nowrap ${
-                              isTight
-                                ? 'px-1.5 py-[2px] text-[9.5px] bg-[#F5F2EC]/95 dark:bg-[#1D211F]/95 border border-[#E5DFD3] dark:border-[#2E3431] text-[#8B7B62] dark:text-[#978B75]'
-                                : isMedium
-                                  ? 'px-2 py-[2px] text-[10px] bg-[#F7F5F0]/95 dark:bg-[#191D1B]/95 border border-[#E6E2D9] dark:border-[#2A302D] text-[#848E88] dark:text-[#76827C]'
-                                  : 'px-2 py-0.5 text-[10px] bg-[#F7F5F0]/90 dark:bg-[#191D1B]/90 border border-[#E6E2D9] dark:border-[#2A302D] text-[#848E88] dark:text-[#76827C]'
-                            }`}
-                          >
-                            {isTight ? label : `${label} free`}
-                          </span>
+                          {hasRoomForPill ? (
+                            <span className="relative rounded-full px-2 py-0.5 text-[10px] font-medium leading-none whitespace-nowrap bg-[#F7F5F0]/90 dark:bg-[#191D1B]/90 border border-[#E6E2D9] dark:border-[#2A302D] text-[#848E88] dark:text-[#76827C]">
+                              {label} free
+                            </span>
+                          ) : (
+                            <span className="relative text-[9.5px] font-medium leading-none whitespace-nowrap text-[#848E88] dark:text-[#78847E]">
+                              {label} free
+                            </span>
+                          )}
                         </div>
                       );
                     })}
@@ -486,7 +564,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                           style={{
                             top: `calc(${topPct}% + 1px)`,
                             height: `calc(${heightPct}% - 2px)`,
-                            minHeight: '58px',
+                            minHeight: `${BLOCK_MIN_HEIGHT_PX}px`,
                             left: `calc(${leftPct}% + 4px)`,
                             width: `calc(${widthPct}% - 8px)`,
                           }}
@@ -542,7 +620,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                         style={{
                           top: `calc(${topPct}% + 1px)`,
                           height: `calc(${heightPct}% - 2px)`,
-                          minHeight: '58px',
+                          minHeight: `${BLOCK_MIN_HEIGHT_PX}px`,
                           left: `calc(${leftPct}% + 4px)`,
                           width: `calc(${widthPct}% - 8px)`,
                         }}
