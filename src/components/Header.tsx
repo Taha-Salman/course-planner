@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   Calendar,
+  Clock,
   Copy,
   Moon,
   Plus,
@@ -15,6 +16,8 @@ interface HeaderProps {
   activeTimetable: Timetable;
   totalCredits: number;
   conflictCount: number;
+  showGaps: boolean;
+  onToggleGaps: () => void;
   showWeekends: boolean;
   onToggleWeekends: () => void;
   dark: boolean;
@@ -49,6 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
   activeTimetable,
   totalCredits,
   conflictCount,
+  showGaps,
+  onToggleGaps,
   showWeekends,
   onToggleWeekends,
   dark,
@@ -114,6 +119,19 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>{conflictCount}</span>
                 </div>
               )}
+
+              <button
+                type="button"
+                onClick={onToggleGaps}
+                title="Show or hide free time between classes"
+                className={`inline-flex h-7 items-center justify-center rounded-xl border px-2 text-[11px] font-medium transition-colors cursor-pointer ${
+                  showGaps
+                    ? 'border-[#CBE0D9] dark:border-[#2E4A43] bg-[#EDF5F2] dark:bg-[#1E312C] text-[#2E6257] dark:text-[#86C4B6]'
+                    : 'border-[#E2DDD3] dark:border-[#2E3532] bg-white dark:bg-[#222725] text-[#55605A] dark:text-[#BFC8C3]'
+                }`}
+              >
+                <Clock className="h-3.5 w-3.5" />
+              </button>
 
               <button
                 type="button"
@@ -222,6 +240,20 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={onToggleGaps}
+              title="Show or hide free time between classes"
+              className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                showGaps
+                  ? 'border-[#CBE0D9] dark:border-[#2E4A43] bg-[#EDF5F2] dark:bg-[#1E312C] text-[#2E6257] dark:text-[#86C4B6]'
+                  : 'border-[#E2DDD3] dark:border-[#2E3532] bg-white dark:bg-[#222725] text-[#55605A] dark:text-[#BFC8C3] hover:bg-[#F5F3EE] dark:hover:bg-[#2A312E]'
+              }`}
+            >
+              <Clock className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Gaps</span>
+            </button>
 
             <button
               type="button"

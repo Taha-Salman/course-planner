@@ -28,13 +28,12 @@ import type {
 } from '../types/course';
 import {
   COURSE_PALETTE,
-  DAY_NAMES,
   findConflictsForMeetings,
   formatDaysCompact,
   formatDaysReadable,
   formatMinutesToTime,
   formatTimeDisplay,
-  matchesCourseLevelRange,
+  matchesSelectedLevels,
   resolveCourse,
   sectionMatchesTimeSlot,
   type TimeSlotFilter,
@@ -67,7 +66,7 @@ interface CourseSidebarProps {
   ) => void;
 }
 
-const FILTER_DAYS: DayCode[] = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];
+const FILTER_LEVELS = [100, 200, 300, 400] as const;
 const FILTER_CREDITS = [1, 2, 3, 4] as const;
 
 function normalizeQuery(str: string): string {
@@ -85,149 +84,6 @@ function getPairDaySuggestion(
   if (d === 'R') return { pairDay: 'T', label: '+ Tue (TR)' };
   return null;
 }
-
-interface FixedTimeInputProps {
-  label: string;
-  minutes: number;
-  onChange: (newMinutes: number) => void;
-}
-
-const FixedTimeInput: React.FC<FixedTimeInputProps> = ({
-  label,
-  minutes,
-  onChange,
-}) => {
-  const minInputRef = useRef<HTMLInputElement>(null);
-
-  const hours24 = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  const isPm = hours24 >= 12;
-  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
-
-  const [hourDraft, setHourDraft] = useState(String(hours12));
-  const [minDraft, setMinDraft] = useState(String(mins).padStart(2, '0'));
-
-  useEffect(() => {
-    setHourDraft(String(hours12));
-    setMinDraft(String(mins).padStart(2, '0'));
-  }, [hours12, mins]);
-
-  const commit = (h12: number, m: number, pm: boolean) => {
-    const clampedH = Math.max(1, Math.min(12, h12));
-    const clampedM = Math.max(0, Math.min(59, m));
-    let h24 = clampedH % 12;
-    if (pm) h24 += 12;
-    onChange(h24 * 60 + clampedM);
-  };
-
-  const handleHourChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const digits = e.target.value.replace(/\D/g, '').slice(0, 2);
-    setHourDraft(digits);
-    if (digits.length > 0) {
-      const parsed = parseInt(digits, 10);
-      if (parsed >= 1 && parsed <= 12) {
-        commit(parsed, mins, isPm);
-        if (digits.length === 2 || parsed >= 2) {
-          minInputRef.current?.focus();
-          minInputRef.current?.select();
-        }
-      }
-    }
-  };
-
-  const handleHourBlur = () => {
-    const parsed = parseInt(hourDraft, 10);
-    if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 12) {
-      commit(parsed, mins, isPm);
-    } else {
-      setHourDraft(String(hours12));
-    }
-  };
-
-  const handleMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const digits = e.target.value.replace(/\D/g, '').slice(0, 2);
-    setMinDraft(digits);
-    if (digits.length === 2) {
-      const parsed = parseInt(digits, 10);
-      if (parsed >= 0 && parsed <= 59) {
-        commit(hours12, parsed, isPm);
-      }
-    }
-  };
-
-  const handleMinBlur = () => {
-    const parsed = parseInt(minDraft, 10);
-    if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 59) {
-      commit(hours12, parsed, isPm);
-      setMinDraft(String(parsed).padStart(2, '0'));
-    } else {
-      setMinDraft(String(mins).padStart(2, '0'));
-    }
-  };
-
-  return (
-    <div className="space-y-1">
-      <span className="block text-[10.5px] font-medium text-[#707A74] dark:text-[#8E9A94]">
-        {label}
-      </span>
-      <div className="flex items-center justify-between rounded-xl border border-[#E2DDD3] dark:border-[#313835] bg-[#FAF9F6] dark:bg-[#252B28] px-1.5 py-1.5 focus-within:border-[#3D7A6E] dark:focus-within:border-[#72B0A2] transition-colors">
-        <div className="flex items-center">
-          <input
-            type="text"
-            inputMode="numeric"
-            aria-label={`${label} hour`}
-            value={hourDraft}
-            onChange={handleHourChange}
-            onBlur={handleHourBlur}
-            onFocus={(e) => e.target.select()}
-            onKeyDown={(e) => {
-              if (e.key === 'a' || e.key === 'A') {
-                e.preventDefault();
-                commit(hours12, mins, false);
-              } else if (e.key === 'p' || e.key === 'P') {
-                e.preventDefault();
-                commit(hours12, mins, true);
-              }
-            }}
-            placeholder="12"
-            className="w-5 bg-transparent text-center text-xs font-semibold text-[#1E2421] dark:text-[#EFF2EF] outline-none"
-          />
-          <span className="text-xs font-semibold text-[#8A948E]">:</span>
-          <input
-            ref={minInputRef}
-            type="text"
-            inputMode="numeric"
-            aria-label={`${label} minutes`}
-            value={minDraft}
-            onChange={handleMinChange}
-            onBlur={handleMinBlur}
-            onFocus={(e) => e.target.select()}
-            onKeyDown={(e) => {
-              if (e.key === 'a' || e.key === 'A') {
-                e.preventDefault();
-                commit(hours12, mins, false);
-              } else if (e.key === 'p' || e.key === 'P') {
-                e.preventDefault();
-                commit(hours12, mins, true);
-              }
-            }}
-            placeholder="00"
-            className="w-5 bg-transparent text-center text-xs font-semibold text-[#1E2421] dark:text-[#EFF2EF] outline-none"
-          />
-        </div>
-
-        <button
-          type="button"
-          onClick={() => commit(hours12, mins, !isPm)}
-          title="Click or press A/P to toggle AM/PM"
-          className="rounded-md bg-[#EAE6DD] dark:bg-[#323A36] px-1.5 py-0.5 text-[10px] font-bold text-[#2E6257] dark:text-[#86C4B6] hover:bg-[#DFD9CE] dark:hover:bg-[#3C4641] transition-colors cursor-pointer"
-        >
-          {isPm ? 'PM' : 'AM'}
-        </button>
-      </div>
-    </div>
-  );
-};
 
 export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   catalog,
@@ -248,18 +104,12 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   const [showFilters, setShowFilters] = useState(() => entries.length === 0);
 
   // Committed course level & credit hours filters
-  const [minLevel, setMinLevel] = useState<number | null>(null);
-  const [maxLevel, setMaxLevel] = useState<number | null>(null);
+  const [selectedLevels, setSelectedLevels] = useState<number[]>([]);
   const [selectedCredits, setSelectedCredits] = useState<number[]>([]);
 
   // Draft state inside the Filter panel (applied on Save, discarded on Cancel)
-  const [draftMinLevel, setDraftMinLevel] = useState('');
-  const [draftMaxLevel, setDraftMaxLevel] = useState('');
+  const [draftLevels, setDraftLevels] = useState<number[]>([]);
   const [draftCredits, setDraftCredits] = useState<number[]>([]);
-  const [draftDays, setDraftDays] = useState<DayCode[]>([]);
-  const [draftStartMin, setDraftStartMin] = useState(12 * 60);
-  const [draftEndMin, setDraftEndMin] = useState(15 * 60);
-  const [draftTimeTouched, setDraftTimeTouched] = useState(false);
 
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const [expandedLecId, setExpandedLecId] = useState<string | null>(null);
@@ -282,13 +132,8 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   }, [timeSlotFilter]);
 
   const openFilters = () => {
-    setDraftMinLevel(minLevel !== null ? String(minLevel) : '');
-    setDraftMaxLevel(maxLevel !== null ? String(maxLevel) : '');
+    setDraftLevels(selectedLevels);
     setDraftCredits(selectedCredits);
-    setDraftDays(timeSlotFilter?.days ?? []);
-    setDraftStartMin(timeSlotFilter?.startMin ?? 12 * 60);
-    setDraftEndMin(timeSlotFilter?.endMin ?? 15 * 60);
-    setDraftTimeTouched(timeSlotFilter !== null);
     setShowFilters(true);
   };
 
@@ -301,28 +146,8 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   };
 
   const handleSaveFilters = () => {
-    const parsedMin = parseInt(draftMinLevel.trim(), 10);
-    const parsedMax = parseInt(draftMaxLevel.trim(), 10);
-    setMinLevel(Number.isNaN(parsedMin) ? null : parsedMin);
-    setMaxLevel(Number.isNaN(parsedMax) ? null : parsedMax);
+    setSelectedLevels([...draftLevels].sort((a, b) => a - b));
     setSelectedCredits([...draftCredits].sort((a, b) => a - b));
-
-    if (draftDays.length > 0 || draftTimeTouched) {
-      const startMin = draftStartMin;
-      const endMin =
-        draftEndMin > draftStartMin
-          ? draftEndMin
-          : Math.min(23 * 60, draftStartMin + 60);
-      onTimeSlotFilterChange({
-        days: draftDays,
-        startMin,
-        endMin,
-        source: 'filter',
-      });
-    } else {
-      onTimeSlotFilterChange(null);
-    }
-
     setExpandedCode(null);
     setShowFilters(false);
   };
@@ -332,17 +157,10 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
   };
 
   const handleRemoveAllFilters = () => {
-    setDraftMinLevel('');
-    setDraftMaxLevel('');
+    setDraftLevels([]);
     setDraftCredits([]);
-    setDraftDays([]);
-    setDraftStartMin(12 * 60);
-    setDraftEndMin(15 * 60);
-    setDraftTimeTouched(false);
-    setMinLevel(null);
-    setMaxLevel(null);
+    setSelectedLevels([]);
     setSelectedCredits([]);
-    onTimeSlotFilterChange(null);
     setExpandedCode(null);
     setShowFilters(false);
   };
@@ -364,13 +182,11 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
     return map;
   }, [entries]);
 
-  const hasLevelFilter = minLevel !== null || maxLevel !== null;
+  const hasLevelFilter = selectedLevels.length > 0;
   const hasCreditsFilter = selectedCredits.length > 0;
   const hasTimeFilter = timeSlotFilter !== null;
   const activeFilterCount =
-    (hasLevelFilter ? 1 : 0) +
-    (hasCreditsFilter ? 1 : 0) +
-    (hasTimeFilter ? 1 : 0);
+    (hasLevelFilter ? 1 : 0) + (hasCreditsFilter ? 1 : 0);
   const isSearchingOrFiltering =
     query.trim().length > 0 ||
     hasLevelFilter ||
@@ -390,7 +206,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
     }> = [];
 
     for (const course of courses) {
-      if (hasLevelFilter && !matchesCourseLevelRange(course.code, minLevel, maxLevel)) {
+      if (hasLevelFilter && !matchesSelectedLevels(course.code, selectedLevels)) {
         continue;
       }
 
@@ -456,8 +272,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
     courses,
     courseMap,
     query,
-    minLevel,
-    maxLevel,
+    selectedLevels,
     hasLevelFilter,
     selectedCredits,
     hasCreditsFilter,
@@ -474,9 +289,9 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
     [filteredResults]
   );
 
-  const toggleDraftDay = (day: DayCode) => {
-    setDraftDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+  const toggleDraftLevel = (lvl: number) => {
+    setDraftLevels((prev) =>
+      prev.includes(lvl) ? prev.filter((l) => l !== lvl) : [...prev, lvl]
     );
   };
 
@@ -491,11 +306,8 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
     : null;
 
   const hasAnyDraftOrActiveFilter =
-    draftMinLevel.trim() !== '' ||
-    draftMaxLevel.trim() !== '' ||
+    draftLevels.length > 0 ||
     draftCredits.length > 0 ||
-    draftDays.length > 0 ||
-    draftTimeTouched ||
     activeFilterCount > 0;
 
   return (
@@ -550,7 +362,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
           <button
             type="button"
             onClick={handleToggleFilters}
-            title="Filter by course level or day & time"
+            title="Filter by course level or credit hours"
             className={`relative inline-flex items-center gap-1 rounded-xl border px-2 py-1.5 text-xs font-medium transition-all cursor-pointer shrink-0 ${
               showFilters || activeFilterCount > 0
                 ? 'border-[#3D7A6E] dark:border-[#6BA89B] bg-[#EDF5F2] dark:bg-[#1E312C] text-[#2B5E53] dark:text-[#8CC8BA]'
@@ -566,7 +378,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
           </button>
         </div>
 
-        {/* Manual Filter Panel with Save & Cancel */}
+        {/* Filter Panel with Multi-Select Level & CH */}
         {showFilters && (
           <form
             onSubmit={(e) => {
@@ -575,7 +387,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
             }}
             className="rounded-xl border border-[#E4E0D7] dark:border-[#2C3330] bg-white dark:bg-[#1F2422] p-3 space-y-3 shadow-xs"
           >
-            {/* Manual Course Level Range */}
+            {/* Course Level (100, 200, 300, 400) */}
             <div className="space-y-1.5">
               <label className="block text-[11.5px] font-semibold text-[#3B443F] dark:text-[#D1DAD5]">
                 Course Level{' '}
@@ -584,37 +396,25 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
                 </span>
               </label>
 
-              <div className="grid grid-cols-2 gap-1.5">
-                <div className="space-y-0.5">
-                  <span className="block text-[10.5px] font-medium text-[#707A74] dark:text-[#8E9A94]">
-                    From
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={draftMinLevel}
-                    onChange={(e) =>
-                      setDraftMinLevel(e.target.value.replace(/\D/g, '').slice(0, 4))
-                    }
-                    placeholder="100"
-                    className="w-full rounded-lg border border-[#E2DDD3] dark:border-[#313835] bg-[#FAF9F6] dark:bg-[#252B28] px-2 py-1 text-xs font-medium text-[#1E2421] dark:text-[#EFF2EF] placeholder:text-[#9AA39E] dark:placeholder:text-[#66726C] focus:border-[#3D7A6E] dark:focus:border-[#72B0A2] focus:outline-none"
-                  />
-                </div>
-                <div className="space-y-0.5">
-                  <span className="block text-[10.5px] font-medium text-[#707A74] dark:text-[#8E9A94]">
-                    To
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={draftMaxLevel}
-                    onChange={(e) =>
-                      setDraftMaxLevel(e.target.value.replace(/\D/g, '').slice(0, 4))
-                    }
-                    placeholder="150"
-                    className="w-full rounded-lg border border-[#E2DDD3] dark:border-[#313835] bg-[#FAF9F6] dark:bg-[#252B28] px-2 py-1 text-xs font-medium text-[#1E2421] dark:text-[#EFF2EF] placeholder:text-[#9AA39E] dark:placeholder:text-[#66726C] focus:border-[#3D7A6E] dark:focus:border-[#72B0A2] focus:outline-none"
-                  />
-                </div>
+              <div className="grid grid-cols-4 gap-1">
+                {FILTER_LEVELS.map((lvl) => {
+                  const selected = draftLevels.includes(lvl);
+                  return (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => toggleDraftLevel(lvl)}
+                      title={`${lvl}–${lvl + 99} courses`}
+                      className={`rounded-lg py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                        selected
+                          ? 'bg-[#3D7A6E] dark:bg-[#5B9B8E] text-white'
+                          : 'bg-[#F3F0E9] dark:bg-[#272D2A] text-[#5C6660] dark:text-[#9BA6A0] hover:bg-[#E8E4DB] dark:hover:bg-[#303734]'
+                      }`}
+                    >
+                      {lvl}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -648,56 +448,6 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
               </div>
             </div>
 
-            {/* Days (Clean Buttons Only — No Empty Bar) & Fixed-Format Time */}
-            <div className="space-y-2 pt-2.5 border-t border-[#EFECE5] dark:border-[#2A302D]">
-              <label className="block text-[11.5px] font-semibold text-[#3B443F] dark:text-[#D1DAD5]">
-                Days &amp; Time{' '}
-                <span className="font-normal text-[#838D87] dark:text-[#7E8A84]">
-                  (Optional)
-                </span>
-              </label>
-
-              <div className="grid grid-cols-7 gap-1">
-                {FILTER_DAYS.map((day) => {
-                  const selected = draftDays.includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => toggleDraftDay(day)}
-                      title={DAY_NAMES[day].full}
-                      className={`rounded-md py-1 text-[10.5px] font-semibold transition-all cursor-pointer ${
-                        selected
-                          ? 'bg-[#3D7A6E] dark:bg-[#5B9B8E] text-white'
-                          : 'bg-[#F3F0E9] dark:bg-[#272D2A] text-[#5C6660] dark:text-[#9BA6A0] hover:bg-[#E8E4DB] dark:hover:bg-[#303734]'
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5">
-                <FixedTimeInput
-                  label="Start (HH:MM)"
-                  minutes={draftStartMin}
-                  onChange={(m) => {
-                    setDraftStartMin(m);
-                    setDraftTimeTouched(true);
-                  }}
-                />
-                <FixedTimeInput
-                  label="End (HH:MM)"
-                  minutes={draftEndMin}
-                  onChange={(m) => {
-                    setDraftEndMin(m);
-                    setDraftTimeTouched(true);
-                  }}
-                />
-              </div>
-            </div>
-
             {/* Remove all, Cancel & Save Action Buttons */}
             <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-[#EFECE5] dark:border-[#2A302D]">
               <button
@@ -728,7 +478,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
           </form>
         )}
 
-        {/* Active Filter / Grid Slot Indicators (Click to edit/remove inside Filter tab) */}
+        {/* Active Filter / Grid Slot Indicators */}
         {(hasLevelFilter || hasCreditsFilter || hasTimeFilter) && (
           <div className="flex flex-wrap items-center gap-1">
             {hasLevelFilter && (
@@ -738,13 +488,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
                 title="Open filters to edit or remove"
                 className="inline-flex items-center gap-1 rounded-full bg-[#EDF5F2] dark:bg-[#1E312C] border border-[#CBE0D9] dark:border-[#2E4A43] px-2.5 py-0.5 text-[11px] font-medium text-[#2B5E53] dark:text-[#8CC8BA] hover:bg-[#E0EFEA] dark:hover:bg-[#263E38] transition-colors cursor-pointer"
               >
-                <span>
-                  {minLevel !== null && maxLevel !== null
-                    ? `${minLevel}–${maxLevel}`
-                    : minLevel !== null
-                      ? `≥ ${minLevel}`
-                      : `≤ ${maxLevel}`}
-                </span>
+                <span>Level {selectedLevels.join(', ')}</span>
               </button>
             )}
 
@@ -760,12 +504,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
             )}
 
             {timeSlotFilter && (
-              <button
-                type="button"
-                onClick={openFilters}
-                title="Open filters to edit or remove"
-                className="inline-flex items-center gap-1 rounded-full bg-[#EDF5F2] dark:bg-[#1E312C] border border-[#CBE0D9] dark:border-[#2E4A43] px-2.5 py-0.5 text-[11px] font-medium text-[#2B5E53] dark:text-[#8CC8BA] hover:bg-[#E0EFEA] dark:hover:bg-[#263E38] transition-colors cursor-pointer"
-              >
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#EDF5F2] dark:bg-[#1E312C] border border-[#CBE0D9] dark:border-[#2E4A43] pl-2 pr-1.5 py-0.5 text-[11px] font-medium text-[#2B5E53] dark:text-[#8CC8BA]">
                 <CalendarClock className="h-3 w-3 shrink-0" />
                 <span>
                   {timeSlotFilter.days.length > 0
@@ -774,7 +513,15 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
                   {formatMinutesToTime(timeSlotFilter.startMin)}–
                   {formatMinutesToTime(timeSlotFilter.endMin)}
                 </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onTimeSlotFilterChange(null)}
+                  title="Clear selected grid slot"
+                  className="rounded-full hover:bg-[#D4E8E1] dark:hover:bg-[#2B443D] p-0.5 cursor-pointer"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
             )}
 
             {pairSuggestion && timeSlotFilter && (
@@ -1216,7 +963,7 @@ export const CourseSidebar: React.FC<CourseSidebarProps> = ({
                     <SlidersHorizontal className="h-3.5 w-3.5 mt-0.5 shrink-0 text-[#3D7A6E] dark:text-[#72B0A2]" />
                     <span>
                       Filter by <strong className="font-semibold text-[#1E2421] dark:text-[#EFF2EF]">level</strong> or{' '}
-                      <strong className="font-semibold text-[#1E2421] dark:text-[#EFF2EF]">day &amp; time</strong>.
+                      <strong className="font-semibold text-[#1E2421] dark:text-[#EFF2EF]">credit hours</strong>.
                     </span>
                   </li>
                   <li className="flex items-start gap-2">

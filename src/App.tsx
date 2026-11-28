@@ -33,6 +33,7 @@ export function App() {
     clearActiveTimetable,
   } = useTimetables();
 
+  const [showGaps, setShowGaps] = useState(false);
   const [showWeekends, setShowWeekends] = useState(false);
   const [mobileTab, setMobileTab] = useState<'timetable' | 'courses'>(
     'timetable'
@@ -140,6 +141,8 @@ export function App() {
     activeTimetable,
     totalCredits,
     conflictCount,
+    showGaps,
+    onToggleGaps: () => setShowGaps((v) => !v),
     showWeekends,
     onToggleWeekends: () => setShowWeekends((v) => !v),
     dark,
@@ -194,6 +197,7 @@ export function App() {
           blocks={blocks}
           previewBlocks={previewBlocks}
           selectedSlot={timeSlotFilter}
+          showGaps={showGaps}
           showWeekends={showWeekends}
           onSelectSlot={handleGridSelectSlot}
           onFocusCourse={handleFocusCourse}

@@ -5,8 +5,11 @@ import {
   COURSE_PALETTE,
   DAY_NAMES,
   DAY_ORDER,
+  computeDayGaps,
+  formatDurationShort,
   formatMinutesToTime,
   formatTimeDisplay,
+  type DayGap,
   type TimeSlotFilter,
 } from '../lib/scheduleUtils';
 
@@ -14,6 +17,7 @@ interface TimetableGridProps {
   blocks: GridBlock[];
   previewBlocks: GridBlock[];
   selectedSlot: TimeSlotFilter | null;
+  showGaps: boolean;
   showWeekends: boolean;
   onSelectSlot: (slot: TimeSlotFilter | null) => void;
   onFocusCourse: (courseCode: string) => void;
@@ -111,6 +115,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
   blocks,
   previewBlocks,
   selectedSlot,
+  showGaps,
   showWeekends,
   onSelectSlot,
   onFocusCourse,
@@ -170,6 +175,16 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     }
     return map;
   }, [allBlocks, visibleDays]);
+
+  const gapsByDay = useMemo(() => {
+    const map = new Map<DayCode, DayGap[]>();
+    if (!showGaps) return map;
+    for (const day of visibleDays) {
+      const dayRealBlocks = blocks.filter((b) => b.day === day);
+      map.set(day, computeDayGaps(day, dayRealBlocks));
+    }
+    return map;
+  }, [showGaps, blocks, visibleDays]);
 
   const toPct = useCallback(
     (minutesFromStart: number) => (minutesFromStart / totalMinutes) * 100,
@@ -321,6 +336,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
           {/* Day Columns */}
           {visibleDays.map((day) => {
             const positioned = blocksByDay.get(day) ?? [];
+            const dayGaps = gapsByDay.get(day) ?? [];
 
             const showLiveDrag = dragState?.day === day;
             const liveStart = showLiveDrag
@@ -413,6 +429,41 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                       </button>
                     </div>
                   )}
+
+                  {/* Free-Time Gaps Between Consecutive Classes (Non-intrusive, drag-through enabled) */}
+                  {showGaps &&
+                    dayGaps.map((gap) => {
+                      const topPct = toPct(gap.startMin - startHour * 60);
+                      const heightPct = toPct(gap.durationMin);
+                      const isTight = gap.durationMin < 30;
+                      const label = formatDurationShort(gap.durationMin);
+
+                      return (
+                        <div
+                          key={`gap-${gap.day}-${gap.startMin}`}
+                          style={{
+                            top: `${topPct}%`,
+                            height: `${heightPct}%`,
+                          }}
+                          className={`absolute inset-x-2 pointer-events-none flex items-center justify-center ${
+                            isTight ? 'z-20' : 'z-5'
+                          }`}
+                        >
+                          {!isTight && (
+                            <div className="absolute inset-y-1.5 left-1/2 -translate-x-1/2 border-l border-dashed border-[#3D7A6E]/35 dark:border-[#72B0A2]/35" />
+                          )}
+                          <span
+                            className={`relative rounded-full px-2 py-0.5 font-semibold leading-none whitespace-nowrap shadow-2xs ${
+                              isTight
+                                ? 'text-[9.5px] bg-[#F7F0E2]/95 dark:bg-[#31291D]/95 border border-[#E2CFA8] dark:border-[#55462D] text-[#78592B] dark:text-[#DFB977]'
+                                : 'text-[10.5px] bg-[#FAF9F6]/95 dark:bg-[#1B2320]/95 border border-[#D4E2DD] dark:border-[#2F443E] text-[#35695E] dark:text-[#8BC6B9]'
+                            }`}
+                          >
+                            {isTight ? label : `${label} free`}
+                          </span>
+                        </div>
+                      );
+                    })}
 
                   {/* Course Blocks (guaranteed minHeight so all details always fit cleanly) */}
                   {positioned.map(({ block, col, totalCols }) => {

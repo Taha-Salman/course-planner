@@ -28,6 +28,53 @@ export interface TimeSlotFilter {
   source?: 'grid' | 'filter';
 }
 
+export interface DayGap {
+  day: DayCode;
+  startMin: number;
+  endMin: number;
+  durationMin: number;
+}
+
+export function formatDurationShort(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hours === 0) return `${mins}m`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
+}
+
+/**
+ * Computes free-time gaps between consecutive classes on a single day.
+ * Overlapping classes are merged into unified busy intervals first.
+ */
+export function computeDayGaps(day: DayCode, dayBlocks: GridBlock[]): DayGap[] {
+  const realBlocks = dayBlocks.filter((b) => !b.isPreview);
+  if (realBlocks.length < 2) return [];
+
+  const sorted = [...realBlocks].sort((a, b) => a.startMin - b.startMin);
+  const merged: Array<{ startMin: number; endMin: number }> = [];
+
+  for (const b of sorted) {
+    const last = merged[merged.length - 1];
+    if (!last || b.startMin > last.endMin) {
+      merged.push({ startMin: b.startMin, endMin: b.endMin });
+    } else {
+      last.endMin = Math.max(last.endMin, b.endMin);
+    }
+  }
+
+  const gaps: DayGap[] = [];
+  for (let i = 0; i < merged.length - 1; i++) {
+    const startMin = merged[i].endMin;
+    const endMin = merged[i + 1].startMin;
+    const durationMin = endMin - startMin;
+    if (durationMin > 0) {
+      gaps.push({ day, startMin, endMin, durationMin });
+    }
+  }
+  return gaps;
+}
+
 export interface CourseColorTheme {
   name: string;
   lightBg: string;
@@ -185,18 +232,18 @@ export function getCourseNumber(code: string): number {
 }
 
 /**
- * Checks whether a course's numeric code falls strictly within [minVal, maxVal] (inclusive).
- * Example: 100 to 150 includes 100..150 only (excludes 151+ and 1000+ courses).
+ * Checks whether a course code matches one of the selected 3-digit level bands
+ * (e.g. 100 -> 100–199, 200 -> 200–299, 300 -> 300–399, 400 -> 400–499).
+ * When no levels are selected, all courses (including 4-digit codes) match.
+ * When any level is selected, 4-digit courses are excluded.
  */
-export function matchesCourseLevelRange(
+export function matchesSelectedLevels(
   code: string,
-  minVal: number | null,
-  maxVal: number | null
+  selectedLevels: number[]
 ): boolean {
+  if (selectedLevels.length === 0) return true;
   const num = getCourseNumber(code);
-  if (minVal !== null && num < minVal) return false;
-  if (maxVal !== null && num > maxVal) return false;
-  return true;
+  return selectedLevels.some((lvl) => num >= lvl && num <= lvl + 99);
 }
 
 /**
